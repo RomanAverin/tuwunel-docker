@@ -8,18 +8,18 @@ services:
     networks:
       - proxy
     environment:
-      TUWUNEL_SERVER_NAME: ${TUWUNEL_SERVER_NAME}
+      TUWUNEL_SERVER_NAME: ${SERVER_NAME}
       TUWUNEL_PORT: ${TUWUNEL_PORT:-6167}
       TUWUNEL_ADDRESS: 0.0.0.0
       TUWUNEL_DATABASE_PATH: /var/lib/tuwunel
       TUWUNEL_ALLOW_REGISTRATION: ${TUWUNEL_ALLOW_REGISTRATION:-false}
-      TUWUNEL_REGISTRATION_TOKEN: ${TUWUNEL_REGISTRATION_TOKEN:-}
+      #TUWUNEL_REGISTRATION_TOKEN: ${TUWUNEL_REGISTRATION_TOKEN}
       TUWUNEL_TRUSTED_SERVERS: ${TUWUNEL_TRUSTED_SERVERS:-["matrix.org"]}
       TUWUNEL_LOG: ${TUWUNEL_LOG:-warn}
       TUWUNEL_WELL_KNOWN: |
         {
-          client=https://${DOMAIN},
-          server=${DOMAIN}:443
+          client=https://${SERVER_NAME},
+          server=${SERVER_NAME}:443
         }
     ulimits:
       nofile:
@@ -27,7 +27,7 @@ services:
         hard: 1048567
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.homeserver.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.homeserver.rule=Host(`${SERVER_NAME}`)"
       - "traefik.http.routers.homeserver.entrypoints=websecure"
       - "traefik.http.routers.homeserver.tls=true"
       - "traefik.http.routers.homeserver.tls.certresolver=letsencrypt"
