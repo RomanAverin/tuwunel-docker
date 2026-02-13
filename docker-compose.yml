@@ -1,0 +1,104 @@
+services:
+  tuwunel:
+    container_name: tuwunel
+    image: ghcr.io/matrix-construct/tuwunel:latest
+    restart: unless-stopped
+    volumes:
+      - db:/var/lib/tuwunel
+    networks:
+      - proxy
+    environment:
+      TUWUNEL_SERVER_NAME: ${TUWUNEL_SERVER_NAME}
+      TUWUNEL_PORT: ${TUWUNEL_PORT:-6167}
+      TUWUNEL_ADDRESS: 0.0.0.0
+      TUWUNEL_DATABASE_PATH: /var/lib/tuwunel
+      TUWUNEL_ALLOW_REGISTRATION: ${TUWUNEL_ALLOW_REGISTRATION:-false}
+      TUWUNEL_REGISTRATION_TOKEN: ${TUWUNEL_REGISTRATION_TOKEN:-}
+      TUWUNEL_TRUSTED_SERVERS: ${TUWUNEL_TRUSTED_SERVERS:-["matrix.org"]}
+      TUWUNEL_LOG: ${TUWUNEL_LOG:-warn}
+      TUWUNEL_WELL_KNOWN: |
+        {
+          client=https://${DOMAIN},
+          server=${DOMAIN}:443
+        }
+    ulimits:
+      nofile:
+        soft: 1048567
+        hard: 1048567
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homeserver.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.homeserver.entrypoints=websecure"
+      - "traefik.http.routers.homeserver.tls=true"
+      - "traefik.http.routers.homeserver.tls.certresolver=letsencrypt"
+      - "traefik.http.services.homeserver.loadbalancer.server.port=${TUWUNEL_PORT:-6167}"
+      - "traefik.http.middlewares.cors.headers.accessControlAllowOriginList=*"
+      - "traefik.http.middlewares.cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS"
+      - "traefik.http.middlewares.cors.headers.accessControlAllowHeaders=Origin,X-Requested-With,Content-Type,Accept,Authorization"
+      - "traefik.http.routers.homeserver.middlewares=cors"
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "acme:/etc/traefik/acme"
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.redirs.entrypoints=web"
+      - "traefik.http.routers.redirs.middlewares=redirect-to-https"
+    configs:
+      - source: dynamic.yml
+        target: /etc/traefik/dynamic.yml
+    environment:
+      TRAEFIK_ENTRYPOINTS_WEB: true
+      TRAEFIK_ENTRYPOINTS_WEB_ADDRESS: ":80"
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO: websecure
+
+      TRAEFIK_ENTRYPOINTS_WEBSECURE: true
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS: ":443"
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS_CERTRESOLVER: letsencrypt
+
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT: true
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL: ${ACME_EMAIL}
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_KEYTYPE: EC384
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_HTTPCHALLENGE: true
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_HTTPCHALLENGE_ENTRYPOINT: web
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_STORAGE: "/etc/traefik/acme/acme.json"
+
+      TRAEFIK_PROVIDERS_DOCKER: true
+      TRAEFIK_PROVIDERS_DOCKER_ENDPOINT: "unix:///var/run/docker.sock"
+      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: false
+
+      TRAEFIK_PROVIDERS_FILE: true
+      TRAEFIK_PROVIDERS_FILE_FILENAME: "/etc/traefik/dynamic.yml"
+
+configs:
+  dynamic.yml:
+    content: |
+      tls:
+        options:
+          default:
+            cipherSuites:
+              - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+              - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+              - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+              - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+              - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+              - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+            minVersion: VersionTLS12
+
+volumes:
+  db:
+  acme:
+
+networks:
+  proxy:
