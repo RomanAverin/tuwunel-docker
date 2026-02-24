@@ -81,6 +81,8 @@ services:
       TRAEFIK_PROVIDERS_FILE: true
       TRAEFIK_PROVIDERS_FILE_FILENAME: "/etc/traefik/dynamic.yml"
 
+      TRAEFIK_LOG_LEVEL: ${TRAEFIK_LOG_LEVEL:-ERROR}
+
 configs:
   dynamic.yml:
     content: |
