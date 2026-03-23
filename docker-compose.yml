@@ -4,7 +4,7 @@ services:
     image: ghcr.io/matrix-construct/tuwunel:latest
     restart: unless-stopped
     volumes:
-      - db:/var/lib/tuwunel
+      - data:/var/lib/tuwunel
     networks:
       - proxy
     environment:
@@ -16,6 +16,7 @@ services:
       TUWUNEL_REGISTRATION_TOKEN: ${TUWUNEL_REGISTRATION_TOKEN}
       TUWUNEL_TRUSTED_SERVERS: ${TUWUNEL_TRUSTED_SERVERS:-["matrix.org"]}
       TUWUNEL_LOG: ${TUWUNEL_LOG:-warn}
+      TUWUNEL_MAX_REQUEST_SIZE: ${TUWUNEL_MAX_REQUEST_SIZE:-20971520}
       TUWUNEL_WELL_KNOWN: |
         {
           client=https://${SERVER_NAME},
@@ -99,7 +100,7 @@ configs:
             minVersion: VersionTLS12
 
 volumes:
-  db:
+  data:
   acme:
 
 networks:
