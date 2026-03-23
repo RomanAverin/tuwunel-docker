@@ -1,7 +1,8 @@
 services:
   tuwunel:
     container_name: tuwunel
-    image: ghcr.io/matrix-construct/tuwunel:latest
+    # image: ghcr.io/matrix-construct/tuwunel:latest
+    image: jevolk/tuwunel:latest
     restart: unless-stopped
     volumes:
       - data:/var/lib/tuwunel
