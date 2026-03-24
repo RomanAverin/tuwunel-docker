@@ -66,6 +66,8 @@ services:
       - --max-port=${TURN_MAX_PORT:-49200}
       - --no-cli
       - --no-tlsv1
+      - --log-file=stdout
+      - --verbose
 
   traefik:
     image: traefik:latest
