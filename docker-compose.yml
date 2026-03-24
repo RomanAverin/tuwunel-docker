@@ -66,7 +66,6 @@ services:
       - --max-port=${TURN_MAX_PORT:-49200}
       - --no-cli
       - --no-tlsv1
-      - --no-tlsv1_1
 
   traefik:
     image: traefik:latest
