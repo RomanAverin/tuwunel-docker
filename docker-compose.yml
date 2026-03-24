@@ -73,7 +73,8 @@ services:
       - --cert=/certs/${SERVER_NAME}/certificate.crt
       - --pkey=/certs/${SERVER_NAME}/privatekey.key
       - --external-ip=${TURN_EXTERNAL_IP}
-      - --log-file=/dev/stdout
+      - --no-stdout-log
+      - --syslog
       - -v
 
   traefik-certs-dumper:
