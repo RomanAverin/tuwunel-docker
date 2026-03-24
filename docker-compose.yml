@@ -73,8 +73,6 @@ services:
       - --cert=/certs/${SERVER_NAME}/certificate.crt
       - --pkey=/certs/${SERVER_NAME}/privatekey.key
       - --external-ip=${TURN_EXTERNAL_IP}
-      - --no-stdout-log
-      - --syslog
       - -v
 
   traefik-certs-dumper:
@@ -87,7 +85,7 @@ services:
     command:
       - file
       - --version=v2
-      - --source=/traefik/acme/acme.json
+      - --source=/traefik/acme.json
       - --dest=/output
       - --domain-subdir
       - --watch
