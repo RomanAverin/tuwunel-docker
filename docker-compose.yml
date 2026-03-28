@@ -62,7 +62,7 @@ services:
       - "3478:3478/tcp"
       - "5349:5349/udp"
       - "5349:5349/tcp"
-      - "${TURN_MIN_PORT:-50201}-${TURN_MAX_PORT:-65535}:${TURN_MIN_PORT:-50201}-${TURN_MAX_PORT:-65535}/udp"
+      - "${TURN_MIN_PORT:-50201}-${TURN_MAX_PORT:-50400}:${TURN_MIN_PORT:-50201}-${TURN_MAX_PORT:-50400}/udp"
     volumes:
       - certs:/certs:ro
     networks:
@@ -75,7 +75,7 @@ services:
       - --listening-port=3478
       - --tls-listening-port=5349
       - --min-port=${TURN_MIN_PORT:-50201}
-      - --max-port=${TURN_MAX_PORT:-65535}
+      - --max-port=${TURN_MAX_PORT:-50400}
       - --no-cli
       - --cert=/certs/${SERVER_NAME}/certificate.crt
       - --pkey=/certs/${SERVER_NAME}/privatekey.key
