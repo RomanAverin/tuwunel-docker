@@ -25,7 +25,8 @@ services:
       TUWUNEL_WELL_KNOWN: |
         {
           client=https://${SERVER_NAME},
-          server=${SERVER_NAME}:443
+          server=${SERVER_NAME}:443,
+          rtc_transports=[{type="livekit", livekit_service_url="https://${LIVEKIT_SUBDOMAIN:-livekit}.${SERVER_NAME}"}]
         }
     ulimits:
       nofile:
@@ -61,7 +62,7 @@ services:
       - "3478:3478/tcp"
       - "5349:5349/udp"
       - "5349:5349/tcp"
-      - "${TURN_MIN_PORT:-49152}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49152}-${TURN_MAX_PORT:-49200}/udp"
+      - "${TURN_MIN_PORT:-50201}-${TURN_MAX_PORT:-65535}:${TURN_MIN_PORT:-50201}-${TURN_MAX_PORT:-65535}/udp"
     volumes:
       - certs:/certs:ro
     networks:
@@ -73,13 +74,56 @@ services:
       - --realm=${SERVER_NAME}
       - --listening-port=3478
       - --tls-listening-port=5349
-      - --min-port=${TURN_MIN_PORT:-49152}
-      - --max-port=${TURN_MAX_PORT:-49200}
+      - --min-port=${TURN_MIN_PORT:-50201}
+      - --max-port=${TURN_MAX_PORT:-65535}
       - --no-cli
       - --cert=/certs/${SERVER_NAME}/certificate.crt
       - --pkey=/certs/${SERVER_NAME}/privatekey.key
       - --external-ip=${TURN_EXTERNAL_IP}
       - -v
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit
+    restart: unless-stopped
+    configs:
+      - source: livekit.yaml
+        target: /etc/livekit.yaml
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7881:7881/tcp"
+      - "${LIVEKIT_PORT_RANGE_START:-50100}-${LIVEKIT_PORT_RANGE_END:-50200}:${LIVEKIT_PORT_RANGE_START:-50100}-${LIVEKIT_PORT_RANGE_END:-50200}/udp"
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.livekit.rule=Host(`${LIVEKIT_SUBDOMAIN:-livekit}.${SERVER_NAME}`)"
+      - "traefik.http.routers.livekit.entrypoints=websecure"
+      - "traefik.http.routers.livekit.tls=true"
+      - "traefik.http.routers.livekit.tls.certresolver=letsencrypt"
+      - "traefik.http.services.livekit.loadbalancer.server.port=7880"
+
+  livekit-jwt:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    container_name: livekit-jwt
+    restart: unless-stopped
+    depends_on:
+      - livekit
+    networks:
+      - proxy
+    environment:
+      LIVEKIT_JWT_BIND: ":8080"
+      LIVEKIT_URL: "wss://${LIVEKIT_SUBDOMAIN:-livekit}.${SERVER_NAME}"
+      LIVEKIT_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_FULL_ACCESS_HOMESERVERS: ${SERVER_NAME}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.livekit-jwt.rule=Host(`${LIVEKIT_SUBDOMAIN:-livekit}.${SERVER_NAME}`) && (PathPrefix(`/sfu/get`) || PathPrefix(`/healthz`) || PathPrefix(`/get_token`))"
+      - "traefik.http.routers.livekit-jwt.entrypoints=websecure"
+      - "traefik.http.routers.livekit-jwt.tls=true"
+      - "traefik.http.routers.livekit-jwt.tls.certresolver=letsencrypt"
+      - "traefik.http.services.livekit-jwt.loadbalancer.server.port=8080"
 
   traefik-certs-dumper:
     image: ldez/traefik-certs-dumper:latest
@@ -143,6 +187,24 @@ services:
       TRAEFIK_LOG_LEVEL: ${TRAEFIK_LOG_LEVEL:-ERROR}
 
 configs:
+  livekit.yaml:
+    content: |
+      port: 7880
+      bind_addresses:
+        - ""
+      rtc:
+        tcp_port: 7881
+        port_range_start: ${LIVEKIT_PORT_RANGE_START:-50100}
+        port_range_end: ${LIVEKIT_PORT_RANGE_END:-50200}
+        use_external_ip: true
+        enable_loopback_candidate: false
+        turn_servers:
+          - host: ${SERVER_NAME}
+            port: 5349
+            protocol: tls
+            secret: "${TURN_SECRET}"
+      keys:
+        ${LIVEKIT_API_KEY}: "${LIVEKIT_API_SECRET}"
   dynamic.yml:
     content: |
       tls:
