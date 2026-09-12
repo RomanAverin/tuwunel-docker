@@ -19,6 +19,8 @@ services:
       TUWUNEL_LOG: ${TUWUNEL_LOG:-warn}
       TUWUNEL_MAX_REQUEST_SIZE: ${TUWUNEL_MAX_REQUEST_SIZE:-20971520}
       TUWUNEL_ALLOW_LEGACY_MEDIA: ${TUWUNEL_ALLOW_LEGACY_MEDIA:-true}
+      # Create an online RocksDB checkpoint when the container receives SIGUSR2.
+      TUWUNEL_ADMIN_SIGNAL_EXECUTE: '["server checkpoint-database"]'
       TUWUNEL_TURN_URIS: '["turn:${SERVER_NAME}:3478?transport=udp", "turn:${SERVER_NAME}:3478?transport=tcp", "turns:${SERVER_NAME}:5349?transport=tcp"]'
       TUWUNEL_TURN_SECRET: ${TURN_SECRET}
       TUWUNEL_TURN_TTL: ${TUWUNEL_TURN_TTL:-86400}
