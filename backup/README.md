@@ -46,6 +46,13 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Скрипт хранит локальные checkpoint семь дней. Значение можно изменить через
 `CHECKPOINT_KEEP_DAYS` в окружении cron.
 
+Если запущен `mautrix-telegram`, скрипт также создаёт согласованный снимок его
+SQLite-базы и копии конфигурации в
+`mautrix-telegram-checkpoints/checkpoint-<timestamp>/`.
+Для этого на Tuwunel-сервере должны быть установлены `sqlite3` и `setfacl`.
+Исходная база `mautrix-telegram/telegram.db` в работающем контейнере напрямую
+не копируется.
+
 Узнайте каталог данных, который потребуется backup-серверу:
 
 ```bash
@@ -81,6 +88,20 @@ sudo setfacl -m u:tuwunel-backup:r \
 новый checkpoint и media должны читаться, а посторонние файлы — оставаться
 недоступными.
 
+После настройки моста повторно запустите скрипт checkpoint. Он сам выдаст
+пользователю резервного копирования чтение снимка базы, конфигурации и
+регистрации. Достаточно уже описанного выше права прохода к каталогу проекта:
+
+```bash
+sudo /usr/local/sbin/tuwunel-checkpoint
+sudo -u tuwunel-backup ls \
+  "$TUWUNEL_PROJECT_PATH/mautrix-telegram-checkpoints"
+```
+
+Если мост настроен, но его контейнер остановлен, создание совместного снимка
+завершится ошибкой. Проверьте журнал и возобновите работу моста до очередного
+резервного копирования.
+
 Найдите установленный `rrsync` командой `command -v rrsync` (часто это
 `/usr/bin/rrsync` или пример из пакета `rsync`) и поместите публичный ключ backup-сервера в
 `~tuwunel-backup/.ssh/authorized_keys`:
@@ -97,7 +118,7 @@ sudo, доступ к Docker socket или парольный вход. Убед
 
 ## 2. Настройка backup-сервера
 
-Установите Borg 1.x, rsync и OpenSSH client. Создайте непривилегированного
+Установите Borg 1.x, rsync, SQLite CLI и OpenSSH client. Создайте непривилегированного
 системного пользователя `borg` и его рабочие каталоги:
 
 ```bash
@@ -122,7 +143,10 @@ install -m 0755 backup/backup.sh /var/lib/borg/backup.sh
 install -m 0600 backup/backup.env.example /var/lib/borg/backup.env
 ```
 
-Заполните `backup.env`. Все пути должны быть абсолютными и не содержать пробелы.
+Заполните `backup.env`. После включения моста добавьте
+`SOURCE_BRIDGE_PATH=/opt/tuwunel-docker` (фактический путь к проекту на
+Tuwunel-сервере). Без этого параметра старые установки продолжают архивировать
+только tuwunel. Все пути должны быть абсолютными и не содержать пробелы.
 Заранее добавьте SSH host key Tuwunel-сервера в `known_hosts`, сверив fingerprint
 по независимому каналу.
 
@@ -178,6 +202,18 @@ borg extract /var/lib/borg/repositories/tuwunel::ИМЯ-АРХИВА
 `database/` в пустой database path, `media/` — в каталог media, восстановите
 `config/`, владельца и права файлов, затем запустите контейнер и проверьте
 работу сервера. Существующие данные сначала сохраните отдельно для отката.
+
+Если архив содержит `telegram/`, перед восстановлением остановите также
+`mautrix-telegram`. Восстановите `telegram/config/config.yaml` и
+`telegram/config/registration.yaml` в каталог `mautrix-telegram/`, а
+`telegram/database/telegram.db` — как `mautrix-telegram/telegram.db`. Не
+переносите старые файлы `telegram.db-wal` и `telegram.db-shm` поверх снимка.
+Установите владельца данных моста UID 1337 и права на каталог `0700`, на
+конфигурацию и регистрацию `0600`. Восстановите tuwunel из **того же архива**:
+его база содержит регистрацию с токенами, которые должны совпадать с
+`registration.yaml` и `config.yaml` моста. После запуска обоих контейнеров
+проверьте `!admin appservices list`, вход бота и обмен сообщениями в
+зашифрованной комнате.
 
 ## Усиление защиты
 

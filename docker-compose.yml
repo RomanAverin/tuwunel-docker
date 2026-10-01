@@ -1,4 +1,18 @@
 services:
+  mautrix-telegram:
+    image: dock.mau.dev/mautrix/telegram:v26.09
+    container_name: mautrix-telegram
+    profiles:
+      - telegram
+    restart: unless-stopped
+    volumes:
+      - ./mautrix-telegram:/data:z
+    networks:
+      - proxy
+    depends_on:
+      tuwunel:
+        condition: service_started
+
   tuwunel:
     container_name: tuwunel
     # image: ghcr.io/matrix-construct/tuwunel:latest

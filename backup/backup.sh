@@ -26,6 +26,7 @@ source "${CONFIG_FILE}"
 : "${BORG_REPO:?BORG_REPO не задан}"
 
 SOURCE_USER="${SOURCE_USER:-tuwunel-backup}"
+SOURCE_BRIDGE_PATH="${SOURCE_BRIDGE_PATH:-}"
 SSH_IDENTITY_FILE="${SSH_IDENTITY_FILE:-}"
 SSH_PORT="${SSH_PORT:-22}"
 MIN_CHECKPOINT_AGE="${MIN_CHECKPOINT_AGE:-1800}"
@@ -39,6 +40,10 @@ LOCK_FILE="${LOCK_FILE:-${STAGING_DIR}/.backup.lock}"
 [[ ${SOURCE_HOST} =~ ^[A-Za-z0-9.-]+$ ]] || die "некорректный SOURCE_HOST"
 [[ ${SOURCE_DATA_PATH} =~ ^/[A-Za-z0-9._/-]+$ ]] || die "SOURCE_DATA_PATH должен быть безопасным абсолютным путём"
 [[ ${SOURCE_CONFIG_PATH} =~ ^/[A-Za-z0-9._/-]+$ ]] || die "SOURCE_CONFIG_PATH должен быть безопасным абсолютным путём"
+if [[ -n ${SOURCE_BRIDGE_PATH} ]]; then
+    [[ ${SOURCE_BRIDGE_PATH} =~ ^/[A-Za-z0-9._/-]+$ ]] ||
+        die "SOURCE_BRIDGE_PATH должен быть безопасным абсолютным путём"
+fi
 [[ ${STAGING_DIR} == /* && ${STAGING_DIR} != / ]] || die "STAGING_DIR должен быть безопасным абсолютным путём"
 [[ ${BORG_REPO} == /* && ${BORG_REPO} != / ]] || die "BORG_REPO должен быть локальным абсолютным путём"
 
@@ -49,6 +54,9 @@ done
 for command_name in borg flock find rsync ssh; do
     command -v "${command_name}" >/dev/null 2>&1 || die "не найдена команда ${command_name}"
 done
+if [[ -n ${SOURCE_BRIDGE_PATH} ]]; then
+    command -v sqlite3 >/dev/null 2>&1 || die "не найдена команда sqlite3"
+fi
 
 if [[ -n ${SSH_IDENTITY_FILE} ]]; then
     [[ -r ${SSH_IDENTITY_FILE} ]] || die "не читается SSH-ключ ${SSH_IDENTITY_FILE}"
@@ -92,6 +100,7 @@ run_borg borg info "${BORG_REPO}"
 remote="${SOURCE_USER}@${SOURCE_HOST}"
 remote_data="${SOURCE_DATA_PATH%/}"
 remote_config="${SOURCE_CONFIG_PATH%/}"
+remote_bridge="${SOURCE_BRIDGE_PATH%/}"
 
 log "Ищется готовый checkpoint на ${SOURCE_HOST}"
 set +e
@@ -135,6 +144,20 @@ rsync -rt --delete --prune-empty-dirs -e "${SSH_COMMAND}" \
     --exclude='*' \
     "${remote}:${remote_config}/" "${STAGING_DIR}/config/"
 
+archive_paths=(database media config)
+if [[ -n ${SOURCE_BRIDGE_PATH} ]]; then
+    mkdir -p "${STAGING_DIR}/telegram"
+    log "Синхронизируется снимок моста ${selected_checkpoint}"
+    rsync -rt --delete --safe-links -e "${SSH_COMMAND}" \
+        "${remote}:${remote_bridge}/mautrix-telegram-checkpoints/${selected_checkpoint}/" \
+        "${STAGING_DIR}/telegram/"
+    [[ -f ${STAGING_DIR}/telegram/config/config.yaml ]] || die "не скачан config.yaml моста"
+    [[ -f ${STAGING_DIR}/telegram/config/registration.yaml ]] || die "не скачан registration.yaml моста"
+    [[ $(sqlite3 -readonly "${STAGING_DIR}/telegram/database/telegram.db" 'PRAGMA quick_check;') == ok ]] ||
+        die "скачанный снимок SQLite моста повреждён"
+    archive_paths+=(telegram)
+fi
+
 [[ -f ${STAGING_DIR}/database/CURRENT ]] || die "в checkpoint отсутствует CURRENT"
 [[ -n $(find "${STAGING_DIR}/database" -maxdepth 1 -type f -name 'MANIFEST-*' -print -quit) ]] ||
     die "в checkpoint отсутствует MANIFEST"
@@ -151,7 +174,7 @@ log "Создаётся архив ${archive_name}"
 (
     cd "${STAGING_DIR}"
     run_borg borg create --stats --show-rc --compression "${BORG_COMPRESSION}" \
-        "${BORG_REPO}::${archive_name}" database media config
+        "${BORG_REPO}::${archive_name}" "${archive_paths[@]}"
 )
 
 log "Применяется политика хранения"
