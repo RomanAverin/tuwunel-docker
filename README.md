@@ -86,6 +86,32 @@ docker compose up -d
    стороны в новой зашифрованной комнате. Порт моста не публикуется через
    Traefik и доступен tuwunel только внутри сети Compose.
 
+### Подключение к Telegram через прокси
+
+Если контейнеру нужен прокси для соединения с Telegram, настройте раздел
+`network.proxy` в `mautrix-telegram/config.yaml`. Пример для SOCKS5-прокси,
+запущенного в той же Docker-сети под именем `proxy-server`:
+
+```yaml
+network:
+  proxy:
+    type: socks5
+    address: "proxy-server:1080"
+    username: ""
+    password: ""
+```
+
+Для MTProxy задайте `type: mtproxy`, адрес в том же формате `хост:порт`, а
+секрет поместите в `password`; `username` оставьте пустым. Поддерживаются
+значения `disabled`, `socks5` и `mtproxy`.
+`127.0.0.1` внутри контейнера указывает на сам мост: для прокси в другом
+контейнере используйте его имя в общей Docker-сети, а для внешнего прокси —
+доступный контейнеру IP-адрес или DNS-имя. После изменения конфигурации
+перезапустите мост командой `docker compose --profile telegram restart mautrix-telegram`.
+Регистрацию appservice менять не нужно. Эти параметры относятся к соединению
+моста с Telegram; tuwunel по-прежнему обращается к мосту напрямую через
+внутреннюю сеть. [Параметры прокси в конфигурации mautrix-telegram](https://docs.mau.fi/configs/mautrix-telegram/v26.09.html).
+
 Для обновления моста измените зафиксированный тег образа после проверки
 [заметок о выпуске](https://github.com/mautrix/telegram/releases), выполните
 `docker compose pull mautrix-telegram` и
