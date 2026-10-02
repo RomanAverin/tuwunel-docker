@@ -15,6 +15,51 @@ docker compose up -d
 используйте `COMPOSE_FILE=docker-compose.yml:docker-compose.rtc.yml`, как показано
 в `.env.example`.
 
+## Превью ссылок
+
+URL-превью включены для всех доменов по умолчанию. Tuwunel получает страницы
+с заголовком `User-Agent: Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)`.
+Запросы медиа превью наследуют эту строку, если в Tuwunel отдельно не задан
+`url_preview_media_user_agent`. Стандартная фильтрация IP-адресов Tuwunel
+продолжает действовать.
+
+По умолчанию исходящие HTTP-запросы Tuwunel, включая страницы и медиа
+URL-превью, используют SOCKS5-прокси `host.docker.internal:1080`.
+Обращения к `mautrix-telegram`, `tuwunel`, `localhost` и `127.0.0.1`
+идут напрямую. Прокси должен слушать доступный контейнерам IP
+Docker-интерфейса хоста; одного `127.0.0.1:1080` на хосте недостаточно.
+Используется `socks5://` с локальным разрешением адресов назначения,
+чтобы сохранить фильтрацию IP-адресов URL-превью.
+[Настройка исходящего прокси Tuwunel](https://github.com/matrix-construct/tuwunel/blob/main/tuwunel-example.toml).
+
+Для другого прокси переопределите `TUWUNEL_PROXY` в `.env` по примеру
+из `.env.example`. Чтобы отключить прокси Tuwunel, задайте
+`TUWUNEL_PROXY='"none"'`.
+
+Настройки можно переопределить в `.env`:
+
+```dotenv
+TUWUNEL_URL_PREVIEW_DOMAIN_EXPLICIT_ALLOWLIST='["*"]'
+TUWUNEL_URL_PREVIEW_USER_AGENT='Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)'
+```
+
+Чтобы разрешить только выбранные домены, задайте, например,
+`TUWUNEL_URL_PREVIEW_DOMAIN_EXPLICIT_ALLOWLIST='["github.com","wikipedia.org"]'`.
+Имена проверяются на точное совпадение. Чтобы отключить превью, задайте
+`TUWUNEL_URL_PREVIEW_DOMAIN_EXPLICIT_ALLOWLIST='[]'`.
+
+После изменения `.env` пересоздайте контейнер:
+
+```bash
+docker compose up -d tuwunel
+```
+
+Проверьте, что установленная версия поддерживает `url_preview_user_agent`.
+Для проверки на сервере получите превью обычной страницы и ссылки YouTube;
+фактический User-Agent можно проверить через HTTP-сервис, возвращающий
+заголовки запроса. Описание поведения и параметров:
+[URL previews в документации Tuwunel](https://matrix-construct.github.io/tuwunel/media/url-previews.html).
+
 ## Мост Telegram
 
 Мост включается профилем `telegram`. До первого запуска получите `api_id` и
@@ -88,26 +133,48 @@ docker compose up -d
 
 ### Подключение к Telegram через прокси
 
-Если контейнеру нужен прокси для соединения с Telegram, настройте раздел
-`network.proxy` в `mautrix-telegram/config.yaml`. Пример для SOCKS5-прокси,
-запущенного в той же Docker-сети под именем `proxy-server`:
+По умолчанию мост подключается к Telegram через SOCKS5-прокси
+`host.docker.internal:1080`. При каждом запуске скрипт
+`scripts/mautrix-telegram-start.sh` устанавливает `network.proxy.type` и
+`network.proxy.address` в `mautrix-telegram/config.yaml` из переменных Compose.
+Эти значения можно переопределить в `.env`:
+
+```dotenv
+TELEGRAM_PROXY_TYPE=socks5
+TELEGRAM_PROXY_ADDRESS=host.docker.internal:1080
+```
+
+Для прямого подключения задайте `TELEGRAM_PROXY_TYPE=disabled`.
+Имя пользователя и пароль, если они нужны, задайте в
+`network.proxy.username` и `network.proxy.password` файла конфигурации:
 
 ```yaml
 network:
   proxy:
     type: socks5
-    address: "proxy-server:1080"
+    address: "host.docker.internal:1080"
     username: ""
     password: ""
 ```
 
-Для MTProxy задайте `type: mtproxy`, адрес в том же формате `хост:порт`, а
-секрет поместите в `password`; `username` оставьте пустым. Поддерживаются
+В Compose для моста задано `host.docker.internal:host-gateway`. На Linux
+прокси должен слушать доступный контейнеру IP Docker-интерфейса хоста:
+если он слушает только `127.0.0.1:1080`, соединение не сработает.
+При прослушивании `0.0.0.0:1080` ограничьте доступ к порту межсетевым экраном.
+После добавления `extra_hosts` пересоздайте контейнер командой
+`docker compose --profile telegram up -d mautrix-telegram`.
+
+Для MTProxy задайте в `.env` `TELEGRAM_PROXY_TYPE=mtproxy` и
+`TELEGRAM_PROXY_ADDRESS=хост:порт`, а секрет поместите в
+`network.proxy.password`; `username` оставьте пустым. Поддерживаются
 значения `disabled`, `socks5` и `mtproxy`.
 `127.0.0.1` внутри контейнера указывает на сам мост: для прокси в другом
 контейнере используйте его имя в общей Docker-сети, а для внешнего прокси —
-доступный контейнеру IP-адрес или DNS-имя. После изменения конфигурации
-перезапустите мост командой `docker compose --profile telegram restart mautrix-telegram`.
+доступный контейнеру IP-адрес или DNS-имя. После изменения `.env` или
+Compose пересоздайте мост командой
+`docker compose --profile telegram up -d mautrix-telegram`.
+После изменения только имени пользователя или пароля в YAML достаточно
+`docker compose --profile telegram restart mautrix-telegram`.
 Регистрацию appservice менять не нужно. Эти параметры относятся к соединению
 моста с Telegram; tuwunel по-прежнему обращается к мосту напрямую через
 внутреннюю сеть. [Параметры прокси в конфигурации mautrix-telegram](https://docs.mau.fi/configs/mautrix-telegram/v26.09.html).

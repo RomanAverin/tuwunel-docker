@@ -7,8 +7,15 @@ services:
     restart: unless-stopped
     volumes:
       - ./mautrix-telegram:/data:z
+      - ./scripts/mautrix-telegram-start.sh:/mautrix-telegram-start.sh:ro,z
+    command: ["/bin/sh", "/mautrix-telegram-start.sh"]
+    environment:
+      TELEGRAM_PROXY_TYPE: ${TELEGRAM_PROXY_TYPE:-socks5}
+      TELEGRAM_PROXY_ADDRESS: ${TELEGRAM_PROXY_ADDRESS:-host.docker.internal:1080}
     networks:
       - proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       tuwunel:
         condition: service_started
@@ -22,6 +29,8 @@ services:
       - data:/var/lib/tuwunel
     networks:
       - proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       TUWUNEL_SERVER_NAME: ${SERVER_NAME}
       TUWUNEL_PORT: ${TUWUNEL_PORT:-6167}
@@ -31,8 +40,11 @@ services:
       TUWUNEL_REGISTRATION_TOKEN: ${TUWUNEL_REGISTRATION_TOKEN}
       TUWUNEL_TRUSTED_SERVERS: ${TUWUNEL_TRUSTED_SERVERS:-["matrix.org"]}
       TUWUNEL_LOG: ${TUWUNEL_LOG:-warn}
+      TUWUNEL_PROXY: '${TUWUNEL_PROXY:-{ by_domain = [{ url = "socks5://host.docker.internal:1080", exclude = ["mautrix-telegram", "tuwunel", "localhost", "127.0.0.1"] }] }}'
       TUWUNEL_MAX_REQUEST_SIZE: ${TUWUNEL_MAX_REQUEST_SIZE:-20971520}
       TUWUNEL_ALLOW_LEGACY_MEDIA: ${TUWUNEL_ALLOW_LEGACY_MEDIA:-true}
+      TUWUNEL_URL_PREVIEW_DOMAIN_EXPLICIT_ALLOWLIST: '${TUWUNEL_URL_PREVIEW_DOMAIN_EXPLICIT_ALLOWLIST:-["*"]}'
+      TUWUNEL_URL_PREVIEW_USER_AGENT: '${TUWUNEL_URL_PREVIEW_USER_AGENT:-Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)}'
       # Create an online RocksDB checkpoint when the container receives SIGUSR2.
       TUWUNEL_ADMIN_SIGNAL_EXECUTE: '["server checkpoint-database"]'
       TUWUNEL_TURN_URIS: '["turn:${SERVER_NAME}:3478?transport=udp", "turn:${SERVER_NAME}:3478?transport=tcp", "turns:${SERVER_NAME}:5349?transport=tcp"]'
